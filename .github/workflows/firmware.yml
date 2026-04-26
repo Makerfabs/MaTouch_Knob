@@ -1,0 +1,65 @@
+name: Build firmware
+
+on:
+  pull_request:
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        permissions:
+          actions: read
+          contents: read
+        steps:
+        - uses: actions/checkout@v6
+        - name: Get branch name
+          id: branch-name
+          uses: tj-actions/branch-names@v9
+        - name: Get last successful workflow run
+          uses: SamhammerAG/last-successful-build-action@v7
+          id: last_successful_commit_push
+          with:
+            branch: ${{ steps.branch-name.outputs.current_branch }} # Get the last successful commit for the current branch.
+            workflow: "Build firmware"
+            fallbackToEarliestSha: true # If SHA of last successful commit can not be determined, use earliest (true) or triggering sha (false)
+        - name: Get changed files since last successful workflow run
+          id: changed-files
+          uses: tj-actions/changed-files@v47
+          with:
+            # Avoid using single or double quotes for multiline patterns
+            files: |
+              .github/workflows/firmware.yml
+              example/matouch_knob/*.*
+            base_sha: ${{ steps.last_successful_commit_push.outputs.sha }}
+        - name: List firmware-related file changes
+          env:
+            ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+          run: |
+            for file in ${ALL_CHANGED_FILES}; do
+              echo "$file was changed"
+            done
+        - name: Compile sketch
+          id: compile-sketch
+          uses: arduino/compile-sketches@v1
+          if: steps.changed-files.outputs.any_changed == 'true'
+          with:
+            platforms: |
+              - name: "esp32:esp32"
+                version: 2.0.17
+            libraries: |
+              - name: ArduinoJson
+                version: 7.0.4
+              - name: AsyncTCP
+                version: 1.1.4
+              - name: ESPAsyncWebSrv
+                version: 1.2.7
+              - name: GFX Library for Arduino
+                version: 1.3.1
+              - name: lvgl
+                version: 8.3.11
+              - name: OneButton
+                version: 2.5.0
+              - name: Simple FOC
+                version: 2.3.2
+            sketch-paths: |
+              - example/matouch_knob/
+            fqbn: "esp32:esp32:esp32s3:CDCOnBoot=cdc,CPUFreq=240,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=opi,LoopCore=1,EventsCore=1" # from build.options.json in sketch build folder, without default/upload options: UploadSpeed=921600,USBMode=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,JTAGAdapter=default,DebugLevel=none,EraseFlash=all
